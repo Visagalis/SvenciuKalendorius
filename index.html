@@ -317,27 +317,6 @@
                             <button data-action="set-view" data-view="monthly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'monthly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewM}</button>
                             <button data-action="set-view" data-view="quarterly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'quarterly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewQ}</button>
                             <button data-action="set-view" data-view="season" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'season' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewS}</button>
-        function render() {
-            const periodInfo = getPeriodInfo(currentDate, viewMode);
-            const stats = calculateStats(periodInfo.months);
-            const t = TRANSLATIONS[currentLang];
-
-            document.getElementById('app').innerHTML = `
-                <!-- Top Header Row -->
-                <div class="flex justify-between items-center mb-2 px-1">
-                    <div class="flex items-center gap-1.5">
-                        <div class="bg-indigo-600 p-1.5 rounded-lg text-white">${ICONS.calendar}</div>
-                        <h1 class="text-[15px] font-bold text-slate-900 tracking-tight">${t.title}</h1>
-                    </div>
-                    
-                    <div class="flex items-center gap-1.5">
-                        <button data-action="toggle-lang" class="w-6 h-6 flex items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600 hover:bg-slate-300 transition-colors">
-                            ${currentLang === 'en' ? 'EN' : 'LT'}
-                        </button>
-                        <div class="flex bg-slate-200/50 p-0.5 rounded-lg">
-                            <button data-action="set-view" data-view="monthly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'monthly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewM}</button>
-                            <button data-action="set-view" data-view="quarterly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'quarterly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewQ}</button>
-                            <button data-action="set-view" data-view="season" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'season' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewS}</button>
                         </div>
                         <button data-action="share" class="flex items-center justify-center w-7 h-7 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors">
                             ${ICONS.share}
