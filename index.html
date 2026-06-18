@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lithuanian Workdays Calendar</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Disable tap highlight on mobile for native app feel */
+        body { -webkit-tap-highlight-color: transparent; }
+    </style>
+</head>
+<body class="bg-[#f4f4f5] text-slate-800 font-sans min-h-screen flex justify-center items-start p-2 sm:p-4">
+    
+    <div id="app" class="w-full max-w-sm flex flex-col">
+        <!-- App content will be injected here by JS -->
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-800 text-white px-4 py-2.5 rounded-full text-xs font-bold shadow-xl flex items-center gap-2 z-50 transition-opacity duration-300 opacity-0 pointer-events-none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        <span id="toast-msg"></span>
+    </div>
+
+    <script>
+        // --- Translations ---
+        const TRANSLATIONS = {
+            en: {
+                title: "LT Workdays",
+                viewM: "M", viewQ: "Q", viewS: "S",
+                statsW: "W:", statsH: "H:", statsS: "Sel:",
+                toastNoDays: "No days selected!",
+                toastCopied: "Copied to clipboard!",
+                toastCopyFail1: "Failed to copy automatically.",
+                toastCopyFail2: "Failed to copy. Try manually.",
+                shareHeader: "🌴 My Selected Vacation Days:\n",
+                shareMonth: "1 month", shareWeek1: "1 week", shareWeeks: "weeks", shareDay1: "1 day", shareDays: "days",
+                winter: "Winter", spring: "Spring", summer: "Summer", autumn: "Autumn",
+                months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+                weekdays: ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'],
+                holidays: {
+                    ny: "New Year", s1: "Restoration of the State Day", ind: "Independence Restoration Day", lab: "Labor Day",
+                    stj: "St. John's Day", s2: "Statehood Day", ass: "Assumption Day", asaints: "All Saints' Day", asouls: "All Souls' Day",
+                    ceve: "Christmas Eve", c1: "Christmas Day", c2: "Second Day of Christmas",
+                    east: "Easter Sunday", eastm: "Easter Monday",
+                    moth: "Mother's Day", fath: "Father's Day"
+                }
+            },
+            lt: {
+                title: "Darbo Dienos",
+                viewM: "M", viewQ: "K", viewS: "S",
+                statsW: "D:", statsH: "Š:", statsS: "Pasirinkta:",
+                toastNoDays: "Nepasirinkta dienų!",
+                toastCopied: "Nukopijuota!",
+                toastCopyFail1: "Nepavyko automatiškai nukopijuoti.",
+                toastCopyFail2: "Nepavyko nukopijuoti. Bandykite rankiniu būdu.",
+                shareHeader: "🌴 Mano pasirinktos atostogų dienos:\n",
+                shareMonth: "1 mėnuo", shareWeek1: "1 savaitė", shareWeeks: "savaitės", shareDay1: "1 diena", shareDays: "dienos",
+                winter: "Žiema", spring: "Pavasaris", summer: "Vasara", autumn: "Ruduo",
+                months: ['Sausis', 'Vasaris', 'Kovas', 'Balandis', 'Gegužė', 'Birželis', 'Liepa', 'Rugpjūtis', 'Rugsėjis', 'Spalis', 'Lapkritis', 'Gruodis'],
+                weekdays: ['PIR', 'ANT', 'TRE', 'KET', 'PEN', 'ŠEŠ', 'SEK'],
+                holidays: {
+                    ny: "Naujieji metai", s1: "Lietuvos valstybės atkūrimo diena", ind: "Lietuvos nepriklausomybės atkūrimo diena", lab: "Tarptautinė darbo diena",
+                    stj: "Rasos ir Joninių diena", s2: "Valstybės diena", ass: "Žolinė", asaints: "Visų Šventųjų diena", asouls: "Vėlinės",
+                    ceve: "Kūčios", c1: "Šv. Kalėdos", c2: "Šv. Kalėdų antroji diena",
+                    east: "Šv. Velykos", eastm: "Antroji Velykų diena",
+                    moth: "Motinos diena", fath: "Tėvo diena"
+                }
+            }
+        };
+
+        // --- State Management & Persistence ---
+        
+        let currentDate = new Date();
+        let viewMode = 'quarterly'; // 'monthly' | 'quarterly' | 'season'
+        
+        let currentLang = localStorage.getItem('lt_workdays_lang') || 'en';
+        
+        const savedDays = localStorage.getItem('lt_workdays_marked');
+        let markedDays = savedDays ? new Set(JSON.parse(savedDays)) : new Set();
+
+        function saveState() {
+            localStorage.setItem('lt_workdays_marked', JSON.stringify(Array.from(markedDays)));
+            localStorage.setItem('lt_workdays_lang', currentLang);
+        }
+
+        // --- SVGs ---
+
+        const ICONS = {
+            calendar: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+            share: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>`,
+            trash: `<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`,
+            chevronLeft: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>`,
+            chevronRight: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>`
+        };
+
+        // --- Helper Functions ---
+
+        function getEaster(year) {
+            const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4;
+            const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+            const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451);
+            return new Date(year, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+        }
+
+        function isHoliday(date) {
+            const y = date.getFullYear(), m = date.getMonth(), d = date.getDate(), dow = date.getDay(); 
+            const h = TRANSLATIONS[currentLang].holidays;
+
+            if (m === 0 && d === 1) return { name: h.ny, isHoliday: true };
+            if (m === 1 && d === 16) return { name: h.s1, isHoliday: true };
+            if (m === 2 && d === 11) return { name: h.ind, isHoliday: true };
+            if (m === 4 && d === 1) return { name: h.lab, isHoliday: true };
+            if (m === 5 && d === 24) return { name: h.stj, isHoliday: true };
+            if (m === 6 && d === 6) return { name: h.s2, isHoliday: true };
+            if (m === 7 && d === 15) return { name: h.ass, isHoliday: true };
+            if (m === 10 && d === 1) return { name: h.asaints, isHoliday: true };
+            if (m === 10 && d === 2) return { name: h.asouls, isHoliday: true };
+            if (m === 11 && d === 24) return { name: h.ceve, isHoliday: true };
+            if (m === 11 && d === 25) return { name: h.c1, isHoliday: true };
+            if (m === 11 && d === 26) return { name: h.c2, isHoliday: true };
+
+            const easter = getEaster(y);
+            if (m === easter.getMonth() && d === easter.getDate()) return { name: h.east, isHoliday: true };
+            
+            const easterMon = new Date(easter); easterMon.setDate(easterMon.getDate() + 1);
+            if (m === easterMon.getMonth() && d === easterMon.getDate()) return { name: h.eastm, isHoliday: true };
+
+            if (m === 4 && dow === 0 && d <= 7) return { name: h.moth, isHoliday: true };
+            if (m === 5 && dow === 0 && d <= 7) return { name: h.fath, isHoliday: true };
+
+            return { isHoliday: false };
+        }
+
+        function formatYYYYMMDD(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+
+        function getCalendarDays(year, month) {
+            const firstDay = new Date(year, month, 1), lastDay = new Date(year, month + 1, 0), days = [];
+            let startDow = firstDay.getDay() - 1; if (startDow === -1) startDow = 6;
+            const prevMonthLastDay = new Date(year, month, 0).getDate();
+            
+            for (let i = startDow - 1; i >= 0; i--) days.push({ date: new Date(year, month - 1, prevMonthLastDay - i), isCurrentMonth: false });
+            for (let i = 1; i <= lastDay.getDate(); i++) days.push({ date: new Date(year, month, i), isCurrentMonth: true });
+            
+            const remaining = (7 - (days.length % 7)) % 7;
+            for (let i = 1; i <= remaining; i++) days.push({ date: new Date(year, month + 1, i), isCurrentMonth: false });
+            return days;
+        }
+
+        function getPeriodInfo(date, mode) {
+            const y = date.getFullYear(), m = date.getMonth(), t = TRANSLATIONS[currentLang];
+            if (mode === 'monthly') {
+                return { label: `${t.months[m]} ${y}`, months: [{ year: y, month: m }] };
+            } else if (mode === 'quarterly') {
+                const q = Math.floor(m / 3);
+                return { label: `Q${q + 1} ${y}`, months: [{ year: y, month: q * 3 }, { year: y, month: q * 3 + 1 }, { year: y, month: q * 3 + 2 }] };
+            } else if (mode === 'season') {
+                if (m === 11 || m === 0 || m === 1) { 
+                    const by = m === 11 ? y + 1 : y;
+                    return { label: `${t.winter} ${by}`, months: [{ year: by - 1, month: 11 }, { year: by, month: 0 }, { year: by, month: 1 }] };
+                } else if (m >= 2 && m <= 4) return { label: `${t.spring} ${y}`, months: [{year: y, month: 2}, {year: y, month: 3}, {year: y, month: 4}] };
+                else if (m >= 5 && m <= 7) return { label: `${t.summer} ${y}`, months: [{year: y, month: 5}, {year: y, month: 6}, {year: y, month: 7}] };
+                else return { label: `${t.autumn} ${y}`, months: [{year: y, month: 8}, {year: y, month: 9}, {year: y, month: 10}] };
+            }
+        }
+
+        function calculateStats(periodMonths) {
+            let workdays = 0, holidays = 0, weekends = 0, marked = 0;
+            periodMonths.forEach(({year, month}) => {
+                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const d = new Date(year, month, i);
+                    if (markedDays.has(formatYYYYMMDD(d))) marked++;
+                    const isHol = isHoliday(d).isHoliday, dow = d.getDay(), isWknd = dow === 0 || dow === 6;
+                    if (isHol && !isWknd) holidays++; else if (isWknd) weekends++; else workdays++;
+                }
+            });
+            return { workdays, holidays, weekends, marked };
+        }
+
+        // --- Sharing Logic ---
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('opacity-0');
+            setTimeout(() => toast.classList.add('opacity-0'), 3000);
+        }
+
+        function handleShare() {
+            const t = TRANSLATIONS[currentLang];
+            if (markedDays.size === 0) return showToast(t.toastNoDays);
+
+            const sortedDates = Array.from(markedDays).sort().map(ds => {
+                const p = ds.split('-'); return new Date(p[0], p[1] - 1, p[2]);
+            });
+
+            const blocks = [];
+            let currentBlock = [sortedDates[0]];
+
+            for (let i = 1; i < sortedDates.length; i++) {
+                const prev = sortedDates[i-1], curr = sortedDates[i];
+                let current = new Date(prev); current.setDate(current.getDate() + 1); current.setHours(0,0,0,0);
+                let checkEnd = new Date(curr); checkEnd.setHours(0,0,0,0);
+
+                let contiguous = true;
+                while (current < checkEnd) {
+                    if (!isHoliday(current).isHoliday && current.getDay() !== 0 && current.getDay() !== 6) { contiguous = false; break; }
+                    current.setDate(current.getDate() + 1);
+                }
+
+                if (contiguous) currentBlock.push(curr);
+                else { blocks.push(currentBlock); currentBlock = [curr]; }
+            }
+            blocks.push(currentBlock);
+
+            let textToShare = t.shareHeader;
+
+            blocks.forEach(block => {
+                const start = block[0], end = block[block.length - 1];
+                const startStr = formatYYYYMMDD(start), endStr = formatYYYYMMDD(end);
+
+                let markedWorkdays = 0;
+                block.forEach(d => { if (!isHoliday(d).isHoliday && d.getDay() !== 0 && d.getDay() !== 6) markedWorkdays++; });
+
+                let workdaysInMonth = 0;
+                const daysInMonth = new Date(start.getFullYear(), start.getMonth() + 1, 0).getDate();
+                for (let i = 1; i <= daysInMonth; i++) {
+                    const d = new Date(start.getFullYear(), start.getMonth(), i);
+                    if (!isHoliday(d).isHoliday && d.getDay() !== 0 && d.getDay() !== 6) workdaysInMonth++;
+                }
+
+                let label = "", range = "";
+
+                if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear() && markedWorkdays === workdaysInMonth) {
+                    label = t.shareMonth;
+                    range = `${t.months[start.getMonth()]} ${start.getFullYear()}`;
+                } else if (markedWorkdays > 0 && markedWorkdays % 5 === 0) {
+                    const w = markedWorkdays / 5;
+                    label = w === 1 ? t.shareWeek1 : `${w} ${t.shareWeeks}`;
+                    range = start.getMonth() === end.getMonth() ? `${startStr} - ${String(end.getDate()).padStart(2, '0')}` : `${startStr} - ${endStr}`;
+                } else {
+                    label = markedWorkdays === 1 ? t.shareDay1 : `${markedWorkdays} ${t.shareDays}`;
+                    if (startStr === endStr) range = startStr;
+                    else if (start.getMonth() === end.getMonth()) range = `${startStr} - ${String(end.getDate()).padStart(2, '0')}`;
+                    else range = `${startStr} - ${endStr}`;
+                }
+                textToShare += `• ${range} (${label})\n`;
+            });
+
+            const textArea = document.createElement("textarea");
+            textArea.value = textToShare;
+            textArea.style.position = "fixed"; textArea.style.top = "-9999px"; textArea.style.left = "-9999px"; textArea.style.opacity = "0";
+            document.body.appendChild(textArea);
+            textArea.focus(); textArea.select();
+            try {
+                if (document.execCommand('copy')) showToast(t.toastCopied);
+                else showToast(t.toastCopyFail1);
+            } catch (err) { showToast(t.toastCopyFail2); }
+            document.body.removeChild(textArea);
+        }
+
+        // --- Rendering ---
+
+        function generateMonthHTML(year, month) {
+            const days = getCalendarDays(year, month);
+            const t = TRANSLATIONS[currentLang];
+            
+            let daysHTML = days.map((dayObj) => {
+                const dateStr = formatYYYYMMDD(dayObj.date);
+                const isMarked = markedDays.has(dateStr);
+                const hol = isHoliday(dayObj.date);
+                const isWeekend = dayObj.date.getDay() === 0 || dayObj.date.getDay() === 6;
+                
+                let cls = "h-7 sm:h-8 flex flex-col items-center justify-center rounded-lg text-xs font-medium relative transition-colors cursor-pointer select-none ";
+                if (isMarked) cls += dayObj.isCurrentMonth ? "bg-indigo-600 text-white shadow-sm " : "bg-indigo-200 text-white ";
+                else if (!dayObj.isCurrentMonth) cls += "text-slate-200 ";
+                else if (hol.isHoliday) cls += "text-red-500 bg-red-50/50 ";
+                else if (isWeekend) cls += "bg-slate-50 text-slate-400 ";
+                else cls += "bg-transparent text-slate-700 hover:bg-slate-50 ";
+
+                const dot = hol.isHoliday ? `<div class="absolute bottom-0.5 w-1 h-1 rounded-full ${isMarked ? 'bg-white' : 'bg-red-400'}"></div>` : '';
+                return `<button data-action="toggle-day" data-date="${dateStr}" class="${cls}" title="${hol.isHoliday ? hol.name : ''}"><span>${dayObj.date.getDate()}</span>${dot}</button>`;
+            }).join('');
+
+            return `
+                <div class="bg-white p-2 rounded-2xl shadow-[0_2px_8px_rgb(0,0,0,0.04)] border border-slate-100 flex flex-col w-full max-w-sm mx-auto">
+                    <div class="text-center font-bold text-[13px] mb-1.5 text-slate-800">${t.months[month]}</div>
+                    <div class="grid grid-cols-7 gap-1 mb-1">
+                        ${t.weekdays.map(day => `<div class="text-center text-[8px] font-bold text-slate-300 uppercase tracking-wider">${day}</div>`).join('')}
+                    </div>
+                    <div class="grid grid-cols-7 gap-y-1 gap-x-1">${daysHTML}</div>
+                </div>
+            `;
+        }
+
+        function render() {
+            const periodInfo = getPeriodInfo(currentDate, viewMode);
+            const stats = calculateStats(periodInfo.months);
+            const t = TRANSLATIONS[currentLang];
+
+            document.getElementById('app').innerHTML = `
+                <!-- Top Header Row -->
+                <div class="flex justify-between items-center mb-2 px-1">
+                    <div class="flex items-center gap-1.5">
+                        <div class="bg-indigo-600 p-1.5 rounded-lg text-white">${ICONS.calendar}</div>
+                        <h1 class="text-[15px] font-bold text-slate-900 tracking-tight">${t.title}</h1>
+                    </div>
+                    
+                    <div class="flex items-center gap-1.5">
+                        <button data-action="toggle-lang" class="w-6 h-6 flex items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600 hover:bg-slate-300 transition-colors">
+                            ${currentLang === 'en' ? 'EN' : 'LT'}
+                        </button>
+                        <div class="flex bg-slate-200/50 p-0.5 rounded-lg">
+                            <button data-action="set-view" data-view="monthly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'monthly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewM}</button>
+                            <button data-action="set-view" data-view="quarterly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'quarterly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewQ}</button>
+                            <button data-action="set-view" data-view="season" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'season' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewS}</button>
+        function render() {
+            const periodInfo = getPeriodInfo(currentDate, viewMode);
+            const stats = calculateStats(periodInfo.months);
+            const t = TRANSLATIONS[currentLang];
+
+            document.getElementById('app').innerHTML = `
+                <!-- Top Header Row -->
+                <div class="flex justify-between items-center mb-2 px-1">
+                    <div class="flex items-center gap-1.5">
+                        <div class="bg-indigo-600 p-1.5 rounded-lg text-white">${ICONS.calendar}</div>
+                        <h1 class="text-[15px] font-bold text-slate-900 tracking-tight">${t.title}</h1>
+                    </div>
+                    
+                    <div class="flex items-center gap-1.5">
+                        <button data-action="toggle-lang" class="w-6 h-6 flex items-center justify-center rounded bg-slate-200 text-[10px] font-bold text-slate-600 hover:bg-slate-300 transition-colors">
+                            ${currentLang === 'en' ? 'EN' : 'LT'}
+                        </button>
+                        <div class="flex bg-slate-200/50 p-0.5 rounded-lg">
+                            <button data-action="set-view" data-view="monthly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'monthly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewM}</button>
+                            <button data-action="set-view" data-view="quarterly" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'quarterly' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewQ}</button>
+                            <button data-action="set-view" data-view="season" class="px-2 py-1 rounded-md text-[10px] font-bold transition-colors ${viewMode === 'season' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500'}">${t.viewS}</button>
+                        </div>
+                        <button data-action="share" class="flex items-center justify-center w-7 h-7 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg transition-colors">
+                            ${ICONS.share}
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Navigation & Compact Stats Bar -->
+                <div class="flex items-center justify-between bg-white px-2 py-1.5 rounded-xl shadow-[0_2px_8px_rgb(0,0,0,0.04)] border border-slate-100 mb-3">
+                    <button data-action="prev" class="p-1 hover:bg-slate-100 rounded-lg text-slate-400">${ICONS.chevronLeft}</button>
+                    
+                    <div class="flex flex-col items-center flex-1">
+                        <span class="text-sm font-black text-slate-800 leading-tight">${periodInfo.label}</span>
+                        <div class="flex items-center gap-2 text-[9px] font-bold mt-0.5">
+                            <span class="text-slate-500">${t.statsW} ${stats.workdays}</span>
+                            <span class="text-slate-300">•</span>
+                            <span class="text-red-400">${t.statsH} ${stats.holidays}</span>
+                            <span class="text-slate-300">•</span>
+                            <span class="text-indigo-500 flex items-center gap-0.5">
+                                ${t.statsS} ${stats.marked} 
+                                ${stats.marked > 0 ? `<div data-action="clear" class="ml-0.5 text-indigo-300 cursor-pointer hover:text-indigo-600">${ICONS.trash}</div>` : ''}
+                            </span>
+                        </div>
+                    </div>
+
+                    <button data-action="next" class="p-1 hover:bg-slate-100 rounded-lg text-slate-400">${ICONS.chevronRight}</button>
+                </div>
+
+                <!-- Calendars Grid -->
+                <div class="flex flex-col gap-2 pb-6">
+                    ${periodInfo.months.map(m => generateMonthHTML(m.year, m.month)).join('')}
+                </div>
+            `;
+        }
+
+        // --- Event Delegation ---
+        
+        document.getElementById('app').addEventListener('click', (e) => {
+            const btn = e.target.closest('button, [data-action], div[data-action]');
+            if (!btn) return;
+
+            const action = btn.getAttribute('data-action');
+
+            if (action === 'toggle-day') {
+                const dateStr = btn.getAttribute('data-date');
+                if (markedDays.has(dateStr)) markedDays.delete(dateStr); else markedDays.add(dateStr);
+                saveState(); render();
+            } else if (action === 'set-view') {
+                viewMode = btn.getAttribute('data-view'); render();
+            } else if (action === 'prev') {
+                currentDate.setMonth(currentDate.getMonth() - (viewMode === 'monthly' ? 1 : 3)); render();
+            } else if (action === 'next') {
+                currentDate.setMonth(currentDate.getMonth() + (viewMode === 'monthly' ? 1 : 3)); render();
+            } else if (action === 'clear') {
+                markedDays.clear(); saveState(); render();
+            } else if (action === 'share') {
+                handleShare();
+            } else if (action === 'toggle-lang') {
+                currentLang = currentLang === 'en' ? 'lt' : 'en';
+                saveState(); render();
+            }
+        });
+
+        // Initialize App
+        render();
+
+    </script>
+</body>
+</html>
